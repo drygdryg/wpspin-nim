@@ -535,7 +535,6 @@ proc generateAll(mac: string): seq[PinCode] =
 
 
 when is_main_module:
-  from os import parseCmdLine
   import argparse
 
   let p = newParser("wpspin"):
@@ -544,23 +543,26 @@ when is_main_module:
     flag("-J", "--json", help = "return results in JSON representation")
     arg("mac", help = "target MAC address to generate PIN code. Example: 11:22:33:44:55:66 or 11-22-33-44-55-66")
 
-  let args = p.parse()
-
-  if (args.mac != "") and (not args.help):
-    let mac = args.mac.multiReplace(mac_separators_replace).toUpperAscii()
-    let pins = if args.get_all: generateAll(mac) else: generateSuggested(mac)
-    if args.json:
-      echo $(%*pins)
-    else:
-      if pins.len != 0:
-        if not args.get_all:
-          echo &"Found {pins.len} PIN(s)"
-        echo &"""{"PIN":<8}   {"Name"}"""
-
-        for pin in pins:
-          let pin_name = if pin.mode == ALGO_STATIC: "Static PIN -- " &
-              pin.name else: pin.name
-          let pin_value = if pin.mode == ALGO_EMPTY: "<empty>" else: pin.pin
-          echo &"{pin_value:<8} | {pin_name}"
+  try:
+    let args = p.parse()
+    if (args.mac != "") and (not args.help):
+      let mac = args.mac.multiReplace(mac_separators_replace).toUpperAscii()
+      let pins = if args.get_all: generateAll(mac) else: generateSuggested(mac)
+      if args.json:
+        echo $(%*pins)
       else:
-        echo "No PINs found -- try to get all PINs (-A)"
+        if pins.len != 0:
+          if not args.get_all:
+            echo &"Found {pins.len} PIN(s)"
+          echo &"""{"PIN":<8}   {"Name"}"""
+
+          for pin in pins:
+            let pin_name = if pin.mode == ALGO_STATIC: "Static PIN -- " &
+                pin.name else: pin.name
+            let pin_value = if pin.mode == ALGO_EMPTY: "<empty>" else: pin.pin
+            echo &"{pin_value:<8} | {pin_name}"
+        else:
+          echo "No PINs found -- try to get all PINs (-A)"
+  except UsageError:
+    echo "Error: invalid arguments. Use -h to get help"
+    quit(QuitFailure)
