@@ -516,12 +516,14 @@ proc generateSuggested(mac: string): seq[PinCode] =
         break
   return pins
 
-proc generateAll(mac: string): seq[PinCode] =
+proc generateAll(mac: string, testing: bool = false): seq[PinCode] =
   var pins = generateSuggested(mac)
   var algos: seq[string] = @[]
   for pin in pins:
     algos.add(pin.algo_id)
   for algo in algorithms:
+    if not testing and (algo.mac_substr == @[]):
+      continue
     if algo.id notin algos:
       pins.add(
         PinCode(
@@ -537,22 +539,23 @@ proc generateAll(mac: string): seq[PinCode] =
 when is_main_module:
   import argparse
 
-  let p = newParser("wpspin"):
+  const p = newParser("wpspin"):
     help("WPS PIN generator which uses known MAC address based algorithms commonly found in Wi-Fi routers firmware to generate their default PINs.")
-    flag("-A", "--get-all", help = "get all PIN codes in addition to the suggested ones")
+    flag("-A", "--gen-all", help = "generate all PIN codes in addition to the suggested ones")
     flag("-J", "--json", help = "return results in JSON representation")
+    flag("-T", "--gen-testing", help="generate pin codes obtained by algorithms for testing (no use cases on real devices)")
     arg("mac", help = "target MAC address to generate PIN code. Example: 11:22:33:44:55:66 or 11-22-33-44-55-66")
 
   try:
     let args = p.parse()
     if (args.mac != "") and (not args.help):
       let mac = args.mac.multiReplace(mac_separators_replace).toUpperAscii()
-      let pins = if args.get_all: generateAll(mac) else: generateSuggested(mac)
+      let pins = if args.gen_all: generateAll(mac, args.gen_testing) else: generateSuggested(mac)
       if args.json:
         echo $(%*pins)
       else:
         if pins.len != 0:
-          if not args.get_all:
+          if not args.gen_all:
             echo &"Found {pins.len} PIN(s)"
           echo &"""{"PIN":<8}   {"Name"}"""
 
