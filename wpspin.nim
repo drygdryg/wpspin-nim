@@ -3,6 +3,11 @@ import std / [strutils, strformat, json]
 const mac_separators_replace = {"-": ":", ".": ":"}
 const mac_separators_remove = {":": "", "-": "", ".": ""}
 
+proc reverse(input: string): string =
+  result = ""
+  for index in countdown(input.high, 0):
+    result.add(input[index])
+
 proc pin_checksum(pincode: uint32): int =
   #[
   Standard WPS checksum algorithm.
@@ -24,7 +29,7 @@ proc finalize_pin(pin: uint32): string = intToStr(add_checksum(pin), 8)
 
 proc pin24(mac: string): string =
   let mac_str = mac.multiReplace(mac_separators_remove)
-  return finalize_pin(uint32(fromHex[uint32](mac_str[6..11]) mod 10_000_000))
+  finalize_pin(uint32(fromHex[uint32](mac_str[6..11]) mod 10_000_000))
 
 proc pin28(mac: string): string =
   let mac_str = mac.multiReplace(mac_separators_remove)
@@ -49,6 +54,39 @@ proc pin44(mac: string): string =
 proc pin48(mac: string): string =
   let mac_str = mac.multiReplace(mac_separators_remove)
   finalize_pin(uint32(fromHex[uint64](mac_str) mod 10_000_000))
+
+proc pin24rh(mac: string): string =
+  let t = mac.multiReplace(mac_separators_remove)[6..11]
+  finalize_pin(uint32(fromHex[uint32](t[4..5] & t[2..3] & t[0..1]) mod 10_000_000))
+
+proc pin32rh(mac: string): string =
+  let t = mac.multiReplace(mac_separators_remove)[4..11]
+  finalize_pin(uint32(fromHex[uint32](t[6..7] & t[4..5] & t[2..3] & t[0..1]) mod 10_000_000))
+
+proc pin48rh(mac: string): string =
+  let t = mac.multiReplace(mac_separators_remove)
+  finalize_pin(uint32(fromHex[uint64](t[10..11] & t[8..9] & t[6..7] & t[4..5] & t[2..3] & t[0..1]) mod 10_000_000))
+
+proc pin24rn(mac: string): string =
+  finalize_pin(fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11].reverse()) mod 10_000_000)
+
+proc pin32rn(mac: string): string =
+  finalize_pin(fromHex[uint32](mac.multiReplace(mac_separators_remove)[4..11].reverse()) mod 10_000_000)
+
+proc pin48rn(mac: string): string =
+  finalize_pin(uint32(fromHex[uint64](mac.multiReplace(mac_separators_remove).reverse()) mod 10_000_000))
+
+proc pin24rb(mac: string): string =
+  let t = fromHex[BiggestInt](mac.multiReplace(mac_separators_remove)[6..11])
+  finalize_pin(uint32(fromBin[uint32](t.toBin(24).reverse()) mod 10_000_000))
+
+proc pin32rb(mac: string): string =
+  let t = fromHex[BiggestInt](mac.multiReplace(mac_separators_remove)[4..11])
+  finalize_pin(uint32(fromBin[uint32](t.toBin(32).reverse()) mod 10_000_000))
+
+proc pin48rb(mac: string): string =
+  let t = fromHex[BiggestInt](mac.multiReplace(mac_separators_remove))
+  finalize_pin(uint32(fromBin[uint64](t.toBin(48).reverse()) mod 10_000_000))
 
 proc pinDLink(mac: string): string =
   let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
@@ -219,6 +257,69 @@ const algorithms = [
     mode: ALGO_MAC,
     mac_substr: @[],
     generator: pin48
+  ),
+  Algorithm(
+    id: "pin24rh",
+    name: "Reverse byte 24-bit",
+    mode: ALGO_MAC,
+    mac_substr: @[],
+    generator: pin24rh
+  ),
+  Algorithm(
+    id: "pin32rh",
+    name: "Reverse byte 32-bit",
+    mode: ALGO_MAC,
+    mac_substr: @[],
+    generator: pin32rh
+  ),
+  Algorithm(
+    id: "pin48rh",
+    name: "Reverse byte 48-bit",
+    mode: ALGO_MAC,
+    mac_substr: @[],
+    generator: pin48rh
+  ),
+  Algorithm(
+    id: "pin24rn",
+    name: "Reverse nibble 24-bit",
+    mode: ALGO_MAC,
+    mac_substr: @[],
+    generator: pin24rn
+  ),
+  Algorithm(
+    id: "pin32rn",
+    name: "Reverse nibble 32-bit",
+    mode: ALGO_MAC,
+    mac_substr: @[],
+    generator: pin32rn
+  ),
+  Algorithm(
+    id: "pin48rn",
+    name: "Reverse nibble 48-bit",
+    mode: ALGO_MAC,
+    mac_substr: @[],
+    generator: pin48rn
+  ),
+  Algorithm(
+    id: "pin24rb",
+    name: "Reverse bits 24-bit",
+    mode: ALGO_MAC,
+    mac_substr: @[],
+    generator: pin24rb
+  ),
+  Algorithm(
+    id: "pin32rb",
+    name: "Reverse bits 32-bit",
+    mode: ALGO_MAC,
+    mac_substr: @[],
+    generator: pin32rb
+  ),
+  Algorithm(
+    id: "pin48rb",
+    name: "Reverse bits 48-bit",
+    mode: ALGO_MAC,
+    mac_substr: @[],
+    generator: pin48rb
   ),
   Algorithm(
     id: "pinDLink",
