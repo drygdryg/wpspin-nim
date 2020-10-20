@@ -15,8 +15,8 @@ $(TARGET): $(SOURCE)
 	nimble uninstall -y argparse
 
 install: $(TARGET)
-	install -d $(DESTDIR)$(BINDIR)
-	install -m 755 $< $(DESTDIR)$(BINDIR)
+	install -d $(BINDIR)
+	install -m 755 $< $(BINDIR)
 
 uninstall:
 	rm $(BINDIR)/$(TARGET)
