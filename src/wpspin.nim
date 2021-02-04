@@ -262,7 +262,7 @@ const algorithms = [
     id: "pin24rh",
     name: "Reverse byte 24-bit",
     mode: ALGO_MAC,
-    mac_substr: @[],
+    mac_substr: @["D8EB97", "0014D1", "3C8CF8"],
     generator: pin24rh
   ),
   Algorithm(
