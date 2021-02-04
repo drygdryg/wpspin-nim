@@ -9,10 +9,8 @@ SOURCE = $(SRCDIR)/wpspin.nim
 all: $(TARGET)
 
 $(TARGET): $(SOURCE)
-	nimble install -y argparse
-	nim compile --gc:none --checks:off --out:$@ $(SOURCE)
+	nimble build -d:release
 	strip $@
-	nimble uninstall -y argparse
 
 install: $(TARGET)
 	install -d $(BINDIR)
