@@ -1,4 +1,4 @@
-import std / [strutils, strformat, json]
+import std / [strutils, strformat, json, sequtils]
 
 const mac_separators_replace = {"-": ":", ".": ":"}
 const mac_separators_remove = {":": "", "-": "", ".": ""}
@@ -636,6 +636,19 @@ proc generateAll(mac: string, testing: bool = false): seq[PinCode] =
       )
   return pins
 
+proc prepareMac(mac: string): string =
+  ## Checks if MAC address is valid and prepares it. Takes a MAC address without separators.
+  ## Returns prepared MAC address with a ":" separator if it's valid, otherwise an empty string.
+  var prepared_mac = mac.multiReplace(mac_separators_remove)
+  if prepared_mac.len != 12:
+    return ""
+  if not all(prepared_mac, proc(c: char): bool = c in HexDigits):   # Checks if each char of prepared_mac is hexdigit
+    return ""
+  prepared_mac = prepared_mac.toUpperAscii()
+  for i in countdown(10, 2, 2):
+    prepared_mac.insert(":", i)
+  return prepared_mac
+
 
 when is_main_module:
   import argparse
@@ -648,25 +661,30 @@ when is_main_module:
     arg("mac", help = "target MAC address to generate PIN code. Example: 11:22:33:44:55:66 or 11-22-33-44-55-66")
 
   try:
-    let args = p.parse()
-    if (args.mac != "") and (not args.help):
-      let mac = args.mac.multiReplace(mac_separators_replace).toUpperAscii()
-      let pins = if args.gen_all: generateAll(mac, args.gen_testing) else: generateSuggested(mac)
-      if args.json:
-        echo $(%*pins)
-      else:
-        if pins.len != 0:
-          if not args.gen_all:
-            echo &"Found {pins.len} PIN(s)"
-          echo &"""{"PIN":<8}   {"Name"}"""
+    let args = p.parse(commandLineParams())
+    let mac = prepareMac(args.mac)
+    if mac == "":
+      echo &"Error: \"{args.mac}\" isn't a valid MAC address"
+      quit(1)
+    let pins = if args.gen_all: generateAll(mac, args.gen_testing) else: generateSuggested(mac)
+    if args.json:
+      echo $(%*pins)
+    else:
+      if pins.len != 0:
+        if not args.gen_all:
+          echo &"Found {pins.len} PIN(s)"
+        echo &"""{"PIN":<8}   {"Name"}"""
 
-          for pin in pins:
-            let pin_name = if pin.mode == ALGO_STATIC: "Static PIN -- " &
-                pin.name else: pin.name
-            let pin_value = if pin.mode == ALGO_EMPTY: "<empty>" else: pin.pin
-            echo &"{pin_value:<8} | {pin_name}"
-        else:
-          echo "No PINs found -- try to get all PINs (-A)"
+        for pin in pins:
+          let pin_name = if pin.mode == ALGO_STATIC: "Static PIN -- " &
+              pin.name else: pin.name
+          let pin_value = if pin.mode == ALGO_EMPTY: "<empty>" else: pin.pin
+          echo &"{pin_value:<8} | {pin_name}"
+      else:
+        echo "No PINs found -- try to get all PINs (-A)"
+  except ShortCircuit as e:
+    if e.flag == "argparse_help":
+      quit(p.help)
   except UsageError:
     echo "Error: invalid arguments. Use -h to get help"
     quit(QuitFailure)
