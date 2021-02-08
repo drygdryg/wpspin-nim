@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.5.0"
+version       = "0.5.1"
 author        = "Victor Golovanenko (drygdryg)"
 description   = "Full-featured WPS PIN generator"
 license       = "MIT"

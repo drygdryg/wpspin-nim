@@ -9,7 +9,7 @@ SOURCE = $(SRCDIR)/wpspin.nim
 all: $(TARGET)
 
 $(TARGET): $(SOURCE)
-	nimble build -d:release
+	nimble build -y -d:release
 	strip $@
 
 install: $(TARGET)
