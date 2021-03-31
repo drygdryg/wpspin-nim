@@ -1,7 +1,19 @@
 import std / [strutils, strformat, json, sequtils]
 
-const mac_separators_replace = {"-": ":", ".": ":"}
 const mac_separators_remove = {":": "", "-": "", ".": ""}
+
+type AlgorithmMode = enum
+  ALGO_MAC,
+  ALGO_EMPTY,
+  ALGO_STATIC
+
+type Algorithm = object
+  id: string
+  name: string
+  mode: AlgorithmMode
+  mac_substr: seq[string]
+  generator: proc(mac: string): string
+
 
 proc reverse(input: string): string =
   result = ""
@@ -26,166 +38,6 @@ proc pin_checksum(pincode: uint32): int =
 proc add_checksum(pin: uint32): int = int(pin) * 10 + pin_checksum(pin)
 
 proc finalize_pin(pin: uint32): string = intToStr(add_checksum(pin), 8)
-
-proc pin24(mac: string): string =
-  let mac_str = mac.multiReplace(mac_separators_remove)
-  finalize_pin(uint32(fromHex[uint32](mac_str[6..11]) mod 10_000_000))
-
-proc pin28(mac: string): string =
-  let mac_str = mac.multiReplace(mac_separators_remove)
-  finalize_pin(uint32(fromHex[uint32](mac_str[5..11]) mod 10_000_000))
-
-proc pin32(mac: string): string =
-  let mac_str = mac.multiReplace(mac_separators_remove)
-  finalize_pin(uint32(fromHex[uint32](mac_str[4..11]) mod 10_000_000))
-
-proc pin36(mac: string): string =
-  let mac_str = mac.multiReplace(mac_separators_remove)
-  finalize_pin(uint32(fromHex[uint64](mac_str[3..11]) mod 10_000_000))
-
-proc pin40(mac: string): string =
-  let mac_str = mac.multiReplace(mac_separators_remove)
-  finalize_pin(uint32(fromHex[uint64](mac_str[2..11]) mod 10_000_000))
-
-proc pin44(mac: string): string =
-  let mac_str = mac.multiReplace(mac_separators_remove)
-  finalize_pin(uint32(fromHex[uint64](mac_str[1..11]) mod 10_000_000))
-
-proc pin48(mac: string): string =
-  let mac_str = mac.multiReplace(mac_separators_remove)
-  finalize_pin(uint32(fromHex[uint64](mac_str) mod 10_000_000))
-
-proc pin24rh(mac: string): string =
-  let t = mac.multiReplace(mac_separators_remove)[6..11]
-  finalize_pin(uint32(fromHex[uint32](t[4..5] & t[2..3] & t[0..1]) mod 10_000_000))
-
-proc pin32rh(mac: string): string =
-  let t = mac.multiReplace(mac_separators_remove)[4..11]
-  finalize_pin(uint32(fromHex[uint32](t[6..7] & t[4..5] & t[2..3] & t[0..1]) mod 10_000_000))
-
-proc pin48rh(mac: string): string =
-  let t = mac.multiReplace(mac_separators_remove)
-  finalize_pin(uint32(fromHex[uint64](t[10..11] & t[8..9] & t[6..7] & t[4..5] & t[2..3] & t[0..1]) mod 10_000_000))
-
-proc pin24rn(mac: string): string =
-  finalize_pin(fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11].reverse()) mod 10_000_000)
-
-proc pin32rn(mac: string): string =
-  finalize_pin(fromHex[uint32](mac.multiReplace(mac_separators_remove)[4..11].reverse()) mod 10_000_000)
-
-proc pin48rn(mac: string): string =
-  finalize_pin(uint32(fromHex[uint64](mac.multiReplace(mac_separators_remove).reverse()) mod 10_000_000))
-
-proc pin24rb(mac: string): string =
-  let t = fromHex[BiggestInt](mac.multiReplace(mac_separators_remove)[6..11])
-  finalize_pin(uint32(fromBin[uint32](t.toBin(24).reverse()) mod 10_000_000))
-
-proc pin32rb(mac: string): string =
-  let t = fromHex[BiggestInt](mac.multiReplace(mac_separators_remove)[4..11])
-  finalize_pin(uint32(fromBin[uint32](t.toBin(32).reverse()) mod 10_000_000))
-
-proc pin48rb(mac: string): string =
-  let t = fromHex[BiggestInt](mac.multiReplace(mac_separators_remove))
-  finalize_pin(uint32(fromBin[uint64](t.toBin(48).reverse()) mod 10_000_000))
-
-proc pinDLink(mac: string): string =
-  let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
-  var pin: uint32 = nic xor 0x55AA55
-  pin = pin xor (((pin and 0xF) shl 4) +
-                  ((pin and 0xF) shl 8) +
-                  ((pin and 0xF) shl 12) +
-                  ((pin and 0xF) shl 16) +
-                  ((pin and 0xF) shl 20))
-  pin = pin mod 10_000_000
-  if pin < 1000000:
-    pin += ((pin mod 9) * 1000000) + 1000000
-  return finalize_pin(pin)
-
-proc pinDLink1(mac: string): string =
-  var nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
-  var pin: uint32 = (nic + 1) xor 0x55AA55
-  pin = pin xor (((pin and 0xF) shl 4) +
-                  ((pin and 0xF) shl 8) +
-                  ((pin and 0xF) shl 12) +
-                  ((pin and 0xF) shl 16) +
-                  ((pin and 0xF) shl 20))
-  pin = pin mod 10_000_000
-  if pin < 1000000:
-    pin += ((pin mod 9) * 1000000) + 1000000
-  return finalize_pin(pin)
-
-proc pinASUS(mac: string): string =
-  var b: array[6, uint16]
-  var i: int = 0
-  for e in mac.split(':'):
-    b[i] = fromHex[uint16](e)
-    i.inc()
-  var pin_code: string = ""
-  for i in 0'u16..<7'u16:
-    pin_code.addInt int((b[i mod 6] + b[5]) mod (10'u16 - (i + b[1] + b[2] + b[
-        3] + b[4] + b[5]) mod 7'u16))
-  return finalize_pin(uint32(parseInt(pin_code)))
-
-proc pinAirocon(mac: string): string =
-  var b: array[6, uint32]
-  var i: int = 0
-  for e in mac.split(':'):
-    b[i] = fromHex[uint32](e)
-    i.inc()
-  let pin = ((b[0] + b[1]) mod 10'u32) +
-            (((b[5] + b[0]) mod 10) * 10'u32) +
-            (((b[4] + b[5]) mod 10) * 100'u32) +
-            (((b[3] + b[4]) mod 10) * 1000'u32) +
-            (((b[2] + b[3]) mod 10) * 10000'u32) +
-            (((b[1] + b[2]) mod 10) * 100000'u32) +
-            (((b[0] + b[1]) mod 10) * 1000000'u32)
-  return finalize_pin(pin)
-
-proc pinInvNIC(mac: string): string =
-  let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
-  return finalize_pin(uint32((not nic and 0xFFFFFF) mod 10_000_000))
-
-proc pinNIC2(mac: string): string =
-  let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
-  return finalize_pin(uint32((nic * 2) mod 10_000_000))
-
-proc pinNIC3(mac: string): string =
-  let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
-  return finalize_pin(uint32((nic * 3) mod 10_000_000))
-
-proc pinOUIsubNIC(mac: string): string =
-  let oui = fromHex[uint32](mac.multiReplace(mac_separators_remove)[0..5])
-  let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
-  var pin: uint32
-  if nic < oui:
-    pin = oui - nic
-  else:
-    pin = (oui + 0x1000000 - nic) and 0xFFFFFF
-  return finalize_pin(pin mod 10_000_000)
-
-proc pinOUIaddNIC(mac: string): string =
-  let oui = fromHex[uint32](mac.multiReplace(mac_separators_remove)[0..5])
-  let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
-  return finalize_pin(((oui + nic) mod 0x1000000) mod 10_000_000)
-
-proc pinOUIxorNIC(mac: string): string =
-  let oui = fromHex[uint32](mac.multiReplace(mac_separators_remove)[0..5])
-  let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
-  return finalize_pin((oui xor nic) mod 10_000_000)
-
-
-type AlgorithmMode = enum
-  ALGO_MAC,
-  ALGO_EMPTY,
-  ALGO_STATIC
-
-type Algorithm = object
-  id: string
-  name: string
-  mode: AlgorithmMode
-  mac_substr: seq[string]
-  generator: proc(mac: string): string
-
 
 const algorithms = [
   Algorithm(
@@ -212,14 +64,20 @@ const algorithms = [
         "72E87B", "0026CE", "9897D1", "E04136", "B246FC", "E24136", "00E020",
         "5CA39D", "D86CE9", "DC7144", "801F02", "E47CF9", "000CF6", "00A026",
         "A0F3C1", "647002", "B0487A", "F81A67", "F8D111", "34BA9A", "B4944E"],
-    generator: pin24
+    generator:
+    proc(mac: string): string =
+      let mac_str = mac.multiReplace(mac_separators_remove)
+      finalize_pin(uint32(fromHex[uint32](mac_str[6..11]) mod 10_000_000))
   ),
   Algorithm(
     id: "pin28",
     name: "28-bit PIN",
     mode: ALGO_MAC,
     mac_substr: @["200BC7", "4846FB", "D46AA8", "F84ABF"],
-    generator: pin28
+    generator:
+    proc(mac: string): string =
+      let mac_str = mac.multiReplace(mac_separators_remove)
+      finalize_pin(uint32(fromHex[uint32](mac_str[5..11]) mod 10_000_000))
   ),
   Algorithm(
     id: "pin32",
@@ -228,98 +86,143 @@ const algorithms = [
     mac_substr: @["000726", "D8FEE3", "FC8B97", "1062EB", "1C5F2B", "48EE0C",
         "802689", "908D78", "E8CC18", "2CAB25", "10BF48", "14DAE9", "3085A9",
         "50465D", "5404A6", "C86000", "F46D04", "3085A9", "801F02"],
-    generator: pin32
+    generator:
+    proc(mac: string): string =
+      let mac_str = mac.multiReplace(mac_separators_remove)
+      finalize_pin(uint32(fromHex[uint32](mac_str[4..11]) mod 10_000_000))
   ),
   Algorithm(
     id: "pin36",
     name: "36-bit PIN",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin36
+    generator:
+    proc(mac: string): string =
+      let mac_str = mac.multiReplace(mac_separators_remove)
+      finalize_pin(uint32(fromHex[uint64](mac_str[3..11]) mod 10_000_000))
   ),
   Algorithm(
     id: "pin40",
     name: "40-bit PIN",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin40
+    generator:
+    proc(mac: string): string =
+      let mac_str = mac.multiReplace(mac_separators_remove)
+      finalize_pin(uint32(fromHex[uint64](mac_str[2..11]) mod 10_000_000))
   ),
   Algorithm(
     id: "pin44",
     name: "44-bit PIN",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin44
+    generator:
+    proc(mac: string): string =
+      let mac_str = mac.multiReplace(mac_separators_remove)
+      finalize_pin(uint32(fromHex[uint64](mac_str[1..11]) mod 10_000_000))
   ),
   Algorithm(
     id: "pin48",
     name: "48-bit PIN",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin48
+    generator:
+    proc(mac: string): string =
+      let mac_str = mac.multiReplace(mac_separators_remove)
+      finalize_pin(uint32(fromHex[uint64](mac_str) mod 10_000_000))
   ),
   Algorithm(
     id: "pin24rh",
     name: "Reverse byte 24-bit",
     mode: ALGO_MAC,
     mac_substr: @["D8EB97", "0014D1", "3C8CF8"],
-    generator: pin24rh
+    generator:
+    proc(mac: string): string =
+      let t = mac.multiReplace(mac_separators_remove)[6..11]
+      finalize_pin(uint32(fromHex[uint32](t[4..5] & t[2..3] & t[
+          0..1]) mod 10_000_000))
   ),
   Algorithm(
     id: "pin32rh",
     name: "Reverse byte 32-bit",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin32rh
+    generator:
+    proc(mac: string): string =
+      let t = mac.multiReplace(mac_separators_remove)[4..11]
+      finalize_pin(uint32(fromHex[uint32](t[6..7] & t[4..5] & t[2..3] & t[
+          0..1]) mod 10_000_000))
   ),
   Algorithm(
     id: "pin48rh",
     name: "Reverse byte 48-bit",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin48rh
+    generator:
+    proc(mac: string): string =
+      let t = mac.multiReplace(mac_separators_remove)
+      finalize_pin(uint32(fromHex[uint64](t[10..11] & t[8..9] & t[6..7] & t[
+          4..5] & t[2..3] & t[0..1]) mod 10_000_000))
   ),
   Algorithm(
     id: "pin24rn",
     name: "Reverse nibble 24-bit",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin24rn
+    generator:
+    proc(mac: string): string =
+      finalize_pin(fromHex[uint32](mac.multiReplace(mac_separators_remove)[
+          6..11].reverse()) mod 10_000_000)
   ),
   Algorithm(
     id: "pin32rn",
     name: "Reverse nibble 32-bit",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin32rn
+    generator:
+    proc(mac: string): string =
+      finalize_pin(fromHex[uint32](mac.multiReplace(mac_separators_remove)[
+          4..11].reverse()) mod 10_000_000)
   ),
   Algorithm(
     id: "pin48rn",
     name: "Reverse nibble 48-bit",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin48rn
+    generator:
+    proc(mac: string): string =
+      finalize_pin(uint32(fromHex[uint64](mac.multiReplace(
+          mac_separators_remove).reverse()) mod 10_000_000))
   ),
   Algorithm(
     id: "pin24rb",
     name: "Reverse bits 24-bit",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin24rb
+    generator:
+    proc(mac: string): string =
+      let t = fromHex[BiggestInt](mac.multiReplace(mac_separators_remove)[6..11])
+      finalize_pin(uint32(fromBin[uint32](t.toBin(24).reverse()) mod 10_000_000))
   ),
   Algorithm(
     id: "pin32rb",
     name: "Reverse bits 32-bit",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin32rb
+    generator:
+    proc(mac: string): string =
+      let t = fromHex[BiggestInt](mac.multiReplace(mac_separators_remove)[4..11])
+      finalize_pin(uint32(fromBin[uint32](t.toBin(32).reverse()) mod 10_000_000))
   ),
   Algorithm(
     id: "pin48rb",
     name: "Reverse bits 48-bit",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pin48rb
+    generator:
+    proc(mac: string): string =
+      let t = fromHex[BiggestInt](mac.multiReplace(mac_separators_remove))
+      finalize_pin(uint32(fromBin[uint64](t.toBin(48).reverse()) mod 10_000_000))
   ),
   Algorithm(
     id: "pinDLink",
@@ -327,7 +230,19 @@ const algorithms = [
     mode: ALGO_MAC,
     mac_substr: @["14D64D", "1C7EE5", "28107B", "84C9B2", "A0AB1B", "B8A386",
         "C0A0BB", "CCB255", "FC7516", "0014D1", "D8EB97"],
-    generator: pinDLink
+    generator:
+    proc(mac: string): string =
+      let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
+      var pin: uint32 = nic xor 0x55AA55
+      pin = pin xor (((pin and 0xF) shl 4) +
+                      ((pin and 0xF) shl 8) +
+                      ((pin and 0xF) shl 12) +
+                      ((pin and 0xF) shl 16) +
+                      ((pin and 0xF) shl 20))
+      pin = pin mod 10_000_000
+      if pin < 1000000:
+        pin += ((pin mod 9) * 1000000) + 1000000
+      return finalize_pin(pin)
   ),
   Algorithm(
     id: "pinDLink1",
@@ -336,7 +251,19 @@ const algorithms = [
     mac_substr: @["0018E7", "00195B", "001CF0", "001E58", "002191", "0022B0",
         "002401", "00265A", "14D64D", "1C7EE5", "340804", "5CD998", "84C9B2",
         "B8A386", "C8BE19", "C8D3A3", "CCB255", "0014D1"],
-    generator: pinDLink1
+    generator:
+    proc(mac: string): string =
+      var nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
+      var pin: uint32 = (nic + 1) xor 0x55AA55
+      pin = pin xor (((pin and 0xF) shl 4) +
+                      ((pin and 0xF) shl 8) +
+                      ((pin and 0xF) shl 12) +
+                      ((pin and 0xF) shl 16) +
+                      ((pin and 0xF) shl 20))
+      pin = pin mod 10_000_000
+      if pin < 1000000:
+        pin += ((pin mod 9) * 1000000) + 1000000
+      return finalize_pin(pin)
   ),
   Algorithm(
     id: "pinASUS",
@@ -359,7 +286,18 @@ const algorithms = [
         "EC4C4D", "F42853", "F43E61", "F46BEF", "F8AB05", "FC8B97", "7062B8",
         "78542E", "C0A0BB8C", "C412F5", "C4A81D", "E8CC18", "EC2280",
         "F8E903F4"],
-    generator: pinASUS
+    generator:
+    proc(mac: string): string =
+      var b: array[6, uint16]
+      var i: int = 0
+      for e in mac.split(':'):
+        b[i] = fromHex[uint16](e)
+        i.inc()
+      var pin_code: string = ""
+      for i in 0'u16..<7'u16:
+        pin_code.addInt int((b[i mod 6] + b[5]) mod (10'u16 - (i + b[1] + b[2] +
+            b[3] + b[4] + b[5]) mod 7'u16))
+      return finalize_pin(uint32(parseInt(pin_code)))
   ),
   Algorithm(
     id: "pinAirocon",
@@ -369,49 +307,89 @@ const algorithms = [
         "001AEF", "00E04BB3", "02101801", "0810734", "08107710", "1013EE0",
         "2CAB25C7", "788C54", "803F5DF6", "94FBB2", "BC9680", "F43E61",
         "FC8B97"],
-    generator: pinAirocon
+    generator:
+    proc(mac: string): string =
+      var b: array[6, uint32]
+      var i: int = 0
+      for e in mac.split(':'):
+        b[i] = fromHex[uint32](e)
+        i.inc()
+      let pin = ((b[0] + b[1]) mod 10'u32) +
+                (((b[5] + b[0]) mod 10) * 10'u32) +
+                (((b[4] + b[5]) mod 10) * 100'u32) +
+                (((b[3] + b[4]) mod 10) * 1000'u32) +
+                (((b[2] + b[3]) mod 10) * 10000'u32) +
+                (((b[1] + b[2]) mod 10) * 100000'u32) +
+                (((b[0] + b[1]) mod 10) * 1000000'u32)
+      return finalize_pin(pin)
   ),
   Algorithm(
     id: "pinInvNIC",
     name: "Inv NIC to PIN",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pinInvNIC
+    generator:
+    proc(mac: string): string =
+      let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
+      return finalize_pin(uint32((not nic and 0xFFFFFF) mod 10_000_000))
   ),
   Algorithm(
     id: "pinNIC2",
     name: "NIC * 2",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pinNIC2
+    generator:
+    proc(mac: string): string =
+      let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
+      return finalize_pin(uint32((nic * 2) mod 10_000_000))
   ),
   Algorithm(
     id: "pinNIC3",
     name: "NIC * 3",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pinNIC3
+    generator:
+    proc(mac: string): string =
+      let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
+      return finalize_pin(uint32((nic * 3) mod 10_000_000))
   ),
   Algorithm(
     id: "pinOUIaddNIC",
     name: "OUI + NIC",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pinOUIaddNIC
+    generator:
+    proc(mac: string): string =
+      let oui = fromHex[uint32](mac.multiReplace(mac_separators_remove)[0..5])
+      let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
+      return finalize_pin(((oui + nic) mod 0x1000000) mod 10_000_000)
   ),
   Algorithm(
     id: "pinOUIsubNIC",
     name: "OUI - NIC",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pinOUIsubNIC
+    generator:
+    proc(mac: string): string =
+      let oui = fromHex[uint32](mac.multiReplace(mac_separators_remove)[0..5])
+      let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
+      var pin: uint32
+      if nic < oui:
+        pin = oui - nic
+      else:
+        pin = (oui + 0x1000000 - nic) and 0xFFFFFF
+      return finalize_pin(pin mod 10_000_000)
   ),
   Algorithm(
     id: "pinOUIxorNIC",
     name: "OUI ^ NIC",
     mode: ALGO_MAC,
     mac_substr: @[],
-    generator: pinOUIxorNIC
+    generator:
+    proc(mac: string): string =
+      let oui = fromHex[uint32](mac.multiReplace(mac_separators_remove)[0..5])
+      let nic = fromHex[uint32](mac.multiReplace(mac_separators_remove)[6..11])
+      return finalize_pin((oui xor nic) mod 10_000_000)
   ),
   Algorithm(
     id: "pinEmpty",
@@ -642,7 +620,8 @@ proc prepareMac(mac: string): string =
   var prepared_mac = mac.multiReplace(mac_separators_remove)
   if prepared_mac.len != 12:
     return ""
-  if not all(prepared_mac, proc(c: char): bool = c in HexDigits):   # Checks if each char of prepared_mac is hexdigit
+  if not all(prepared_mac, proc(c: char): bool = c in
+      HexDigits): # Checks if each char of prepared_mac is hexdigit
     return ""
   prepared_mac = prepared_mac.toUpperAscii()
   for i in countdown(10, 2, 2):
@@ -657,7 +636,7 @@ when is_main_module:
     help("WPS PIN generator which uses known MAC address based algorithms commonly found in Wi-Fi routers firmware to generate their default PINs.")
     flag("-A", "--gen-all", help = "generate all PIN codes in addition to the suggested ones")
     flag("-J", "--json", help = "return results in JSON representation")
-    flag("-T", "--gen-testing", help="generate pin codes obtained by algorithms for testing (no use cases on real devices)")
+    flag("-T", "--gen-testing", help = "generate pin codes obtained by algorithms for testing (no use cases on real devices)")
     arg("mac", help = "target MAC address to generate PIN code. Example: 11:22:33:44:55:66 or 11-22-33-44-55-66")
 
   try:
@@ -666,7 +645,8 @@ when is_main_module:
     if mac == "":
       echo &"Error: \"{args.mac}\" isn't a valid MAC address"
       quit(1)
-    let pins = if args.gen_all: generateAll(mac, args.gen_testing) else: generateSuggested(mac)
+    let pins = if args.gen_all: generateAll(mac,
+        args.gen_testing) else: generateSuggested(mac)
     if args.json:
       echo $(%*pins)
     else:
